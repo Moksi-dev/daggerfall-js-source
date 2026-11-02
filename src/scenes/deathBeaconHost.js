@@ -66,9 +66,6 @@ export function createDeathBeaconHost(deps) {
     absolutePoints: points,
     mapCircles: () => { sync(); return mapsOn()?records.map(deathMapCircle).filter(Boolean):[]; },
     worldPoints: () => points().map(p=>({...p,at:deps.fromWorld(p.at)})),
-    // Keep the previous kit's read-only entry points until its adapter is regenerated.
-    mapCircle: () => api.mapCircles()[0]??null,
-    worldPoint: () => api.worldPoints()[0]??null,
     frame(covered) {
       sync();
       if (!getPref('deathBeacon') || !records.length) { release(); return; }
@@ -94,7 +91,7 @@ export function createDeathBeaconHost(deps) {
             beamReady??=startPrograms(deps.renderer.gl,DeathBeacon.programs);
             if(!beam&&beamReady())beam=new DeathBeacon(deps.renderer.gl);
             beam?.draw(deps.renderer,[row.at[0],row.at[1]+.3,row.at[2]],{...deathBeamStyle(row.metres,{height:deathNumber('deathBeamHeight',100,5,100),opacity:deathNumber('deathOpacity',.6,.1,.6),exterior:here.space==='world'}),
-              width:Math.min(1.5,Math.max(.3,row.metres*.003)),color:colorRGB(deathColor('deathColor','#a4dcff')),lowerWave:deathNumber('deathLowerWave',1,0,1),time:(now()%3600000)/1000});
+              width:Math.min(1.5,Math.max(.3,row.metres*.003)),color:colorRGB(deathColor('deathColor','#a4dcff')),straight:true});
           }catch(e){beam?.dispose();beam=null;failed=true;console.warn('[death beacon] Beam unavailable; skull markers remain.',e);}
         }
         if(typeof document==='undefined')continue;

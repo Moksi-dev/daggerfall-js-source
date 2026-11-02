@@ -18,17 +18,26 @@ void main() {
 const FS = `#version 300 es
 precision highp float;
 in vec2 uv;
-uniform float uTime, uOpacity, uLowerWave;
+uniform float uTime, uOpacity, uLowerWave, uStraight;
 uniform vec3 uColor;
 out vec4 color;
 void main() {
+  if (uStraight > 0.5) {
+    // A still, centred holy column. Narrow to a point; no sine/time shimmer.
+    float taper = max(0.015, 1.0-smoothstep(0.35,1.0,uv.y));
+    float x = uv.x/taper;
+    float light = 0.28*exp(-8.0*x*x)+0.58*exp(-95.0*x*x);
+    float fade = smoothstep(0.0,0.025,uv.y)*(1.0-smoothstep(0.85,1.0,uv.y));
+    color = vec4(uColor,light*fade*uOpacity);
+    return;
+  }
   float drift = 0.16*sin(uv.y*19.0-uTime*0.7) + 0.08*sin(uv.y*41.0+uTime);
   // Keep the foot anchored, but optionally carry the wisps down the lower column.
   float lowSway = smoothstep(0.0,0.12,uv.y)*(0.65+0.35*uv.y);
   float x = uv.x + drift*mix(uv.y,lowSway,uLowerWave);
   float veil = exp(-8.0*x*x)*(0.32+0.13*sin(uv.y*34.0-uTime*1.5));
   float core = exp(-95.0*x*x)*0.48;
-  float fade = smoothstep(0.0,0.035,uv.y)*(1.0-smoothstep(0.48,1.0,uv.y));
+  float fade = smoothstep(0.0,0.035,uv.y)*(1.0-smoothstep(0.72,1.0,uv.y));
   float a = (veil+core)*fade;
   color = vec4(uColor,a*uOpacity);
 }`;
@@ -38,9 +47,12 @@ export class DeathBeacon {
   static programs = [[VS, FS]];
   constructor(gl) {
     this.gl = gl; this.program = buildProgram(gl, VS, FS, 'death beacon'); this.vao = gl.createVertexArray();
-    this.u = Object.fromEntries(['Proj', 'View', 'Base', 'Right', 'Size', 'Time', 'Color', 'Opacity', 'LowerWave', 'Sky'].map((k) => [k, gl.getUniformLocation(this.program, `u${k}`)]));
+    this.u = Object.fromEntries(['Proj', 'View', 'Base', 'Right', 'Size', 'Time', 'Color', 'Opacity', 'LowerWave', 'Sky', 'Straight'].map((k) => [k, gl.getUniformLocation(this.program, `u${k}`)]));
   }
-  draw(r, at, { height = 100, width = 2, time = 0, color = [.58,.85,1], opacity = 1, lowerWave = 0, throughWalls = true } = {}) {
+  draw(r, at, options = {}) { return this.drawMany(r,[{at,...options}]); }
+  // Save/restore driver state once for the entire bounded marker group.
+  drawMany(r, rows) {
+    if (!rows.length) return;
     const gl = this.gl;
     if (gl.isContextLost() || !r._proj || !r._view) return;
     r.endUiRun();
@@ -53,14 +65,17 @@ export class DeathBeacon {
       const v = r._view, n = Math.hypot(v[0], v[8]) || 1;
       gl.useProgram(this.program); gl.bindVertexArray(this.vao);
       gl.uniformMatrix4fv(this.u.Proj, false, r._proj); gl.uniformMatrix4fv(this.u.View, false, v);
+      for (const {at,height=100,width=2,time=0,color=[.58,.85,1],opacity=1,lowerWave=0,throughWalls=true,straight=false,additive=false} of rows) {
       gl.uniform3fv(this.u.Base, at); gl.uniform3f(this.u.Right, v[0]/n, 0, v[8]/n);
       gl.uniform2f(this.u.Size, width, height); gl.uniform1f(this.u.Time, time);
       gl.uniform3fv(this.u.Color,color); gl.uniform1f(this.u.Opacity,opacity);
       gl.uniform1f(this.u.LowerWave,Number.isFinite(lowerWave)?Math.max(0,Math.min(1,lowerWave)):0);
+      gl.uniform1f(this.u.Straight,straight?1:0);
       gl.uniform1f(this.u.Sky,throughWalls?1:0);
       gl.depthMask(false); if(throughWalls)gl.disable(gl.DEPTH_TEST);else {gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);} gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND);
-      gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.SRC_ALPHA, additive?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
     } finally {
       gl.depthMask(saved.mask); gl.depthFunc(saved.depthFunc); gl.blendEquationSeparate(saved.eq, saved.eqA); gl.blendFuncSeparate(saved.src, saved.dst, saved.srcA, saved.dstA);
       for (const [flag, on] of saved.flags) { if (on) gl.enable(flag); else gl.disable(flag); }

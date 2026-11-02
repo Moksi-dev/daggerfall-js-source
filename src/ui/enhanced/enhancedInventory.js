@@ -1,3 +1,5 @@
+import {createStackSplitDialog,isStackSplitClick,stackSplitEnabled} from '../stackSplitDialog.js';
+const inventorySplit=createStackSplitDialog();
 // ═══════════════════════════════════════════════════════════════════
 // U53 — THE ENHANCED PACK, and THE SLOT MAP
 //
@@ -1712,7 +1714,7 @@ function qtyField(item, max) {
 const heldBusy = new Set();
 /** A chest the service holds moves there before the window does, inside the act's own apply, so the next checkpoint matches it. */
 function heldThen(dir, item, amount, go) {
-  const commit = deps.loot?.commit;
+  const commit = session.usingWagon || session.usingBag ? null : deps.loot?.commit;
   if (typeof commit !== 'function') { go(); return; }
   if (heldBusy.has(item)) return;
   heldBusy.add(item);
@@ -2893,6 +2895,17 @@ function tileWithWear(line, holder, box, snap = true) {
   return tile;
 }
 
+function openInventorySplit(item,from){
+  if(!Number.isSafeInteger(item?.stackCount)||item.stackCount<=1||session.chooseOne)return;
+  if(!remote||!STORE_FILTER_KINDS.has(remote.kind))return;
+  const owner=host,sourceDeps=deps,kind=remote.kind,dir=from==='remote'?'take':'store';
+  const valid=()=>host===owner&&deps===sourceDeps&&remote?.kind===kind&&!session.chooseOne&&(from==='remote'?remoteTarget(deps,sessionState()):(deps.items?.()??[])).includes(item);
+  inventorySplit.open({owner,name:lineOf(item).name,destination:from==='remote'?'inventory':remote.title,
+    getTotal:()=>item.stackCount??1,getMax:()=>valid()?Math.min(item.stackCount??1,splitMax(item,dir)):0,
+    onConfirm:amount=>{if(!valid())return;qty={item,text:String(amount)};try{if(from==='remote')take(item);else stow(item);}finally{if(qty.item===item)qty={item:null,text:''};}},
+  });
+}
+
 function itemRow(item, from = 'local') {
   const line = lineOf(item);   // VIRT: once a pass
   const choosing = !!salvageSel && from === 'local';   // BATCH-SALVAGE: a pack row is a tick while the pack chooses
@@ -2932,6 +2945,9 @@ function itemRow(item, from = 'local') {
   // a theft.
   if (from === 'local' && !choosing) dragFrom(row, item);   // AUDIT BATCH C3: a ticked piece is never dragged off while the pack chooses
   row.onclick = (e) => {
+    if(stackSplitEnabled()&&isStackSplitClick(e)){
+      e.preventDefault?.();openInventorySplit(item,from);return;
+    }
     // AUDIT INV1 Fb: a release that DRAGGED is not a pick. The click
     // fires after pointerup, so without this a reorder would also
     // select the row it left.
@@ -4698,6 +4714,7 @@ function fatePickAt(id) {
   if (id) host?.querySelector?.('.fate-confirm')?.scrollIntoView?.({ block: 'nearest' });
 }
 function onKey(e) {
+  if(inventorySplit.key(e))return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
@@ -4876,6 +4893,7 @@ export function mountEnhancedInventory(hostEl, d = {}) {
      *  window going is the door's event, not this module's. */
     dropped: () => dropped,
     unmount() {
+      inventorySplit.close();
       hidePlusFloaters();   // PLUS7
       closeInfo();   // PLUS10: the Info box survives a repaint (it is about an item, not a row) but not the window
       closeDismantle();   // SS5: nor does the dismantle's question

@@ -1,3 +1,5 @@
+import { deathColor, colorRGB } from '../systems/map/deathMarkerPresentation.js';
+import { createOverworldBeaconHost } from './overworldBeaconHost.js';
 import {createDeathBeaconHost} from './deathBeaconHost.js';
 // Milestone 7: ?world (&region=&loc=) renders a location ON its terrain -
 // the location pixel flattened to average height, city tiles stamped into
@@ -27054,7 +27056,15 @@ export async function bootWorld(canvas, renderer, params, status) { handHeroGend
     mode: _mode, pixel: playerTravelPixel, terrainSize: TERRAIN_SIZE, viewport: worldViewportRect,
     get social() { return social; }, get online() { return online; }, get peerBodies() { return peerBodies; },
     get peerWalkers() { return peerWalkers; }, get peerRiders() { return peerRiders; }, get remotePlayers() { return remotePlayers; } });
-  const drawVeiledPeerBodies = () => { peerBodies?.drawVeiled(); auraHost.draw(); nodeGlintPass.draw(travelView?.active ? null : nodeMarksAt(enchantFeet())); partyPing?.draw(renderer); deathMarkers.frame(!!travelView?.active || townTalk.hudCovered || (modes?.hudCovered ?? false) || gamePaused()); betterCampfires.frame(!!travelView?.active || townTalk.hudCovered || (modes?.hudCovered ?? false) || gamePaused()); partyVisibility.frame(renderer._proj,renderer._view,renderer._camPos,gamePaused()||townTalk.hudCovered||townTalk.hudHidden||!hudRenderEnabled()||modes?.hudCovered||!!travelView?.active); };   // WB9g: and the auras, after the opaque world as the veiled are; NODE-MARKS: and the nodes' light - NODE-GLINT's glints, the glow a node with no picture
+  const overworldBeacons = createOverworldBeaconHost({renderer,canvas,
+    view:()=>({active:!!travelView?.active && _mode()==='exterior',eye:travelView?.eye,
+      covered:!walkMode||!playerSpawned||playerEntity.health<=0||gamePaused()||townTalk.hudCovered||townTalk.hudHidden||!hudRenderEnabled()||!!modes?.hudCovered}),
+    rows:()=>[
+      ...betterCampfires.beamPoints().map(at=>({at,color:[1,.7,.3],opacity:getPref('ketaCampOpacity')??.6,height:getPref('ketaCampMapHeight')??1000,lowerWave:1,time:performance.now()/1000})),
+      ...(getPref('deathBeams')!==false?deathMarkers.worldPoints():[]).map(p=>({at:p.at,color:colorRGB(deathColor('deathColor','#a4dcff')),opacity:getPref('deathOpacity')??.6,height:getPref('ketaDeathMapHeight')??1000,straight:true}))
+    ],
+  });
+  const drawVeiledPeerBodies = () => { peerBodies?.drawVeiled(); auraHost.draw(); nodeGlintPass.draw(travelView?.active ? null : nodeMarksAt(enchantFeet())); partyPing?.draw(renderer); overworldBeacons.frame(); deathMarkers.frame(!!travelView?.active || townTalk.hudCovered || (modes?.hudCovered ?? false) || gamePaused()); betterCampfires.frame(!!travelView?.active || townTalk.hudCovered || (modes?.hudCovered ?? false) || gamePaused()); partyVisibility.frame(renderer._proj,renderer._view,renderer._camPos,gamePaused()||townTalk.hudCovered||townTalk.hudHidden||!hudRenderEnabled()||modes?.hudCovered||!!travelView?.active); };   // WB9g: and the auras, after the opaque world as the veiled are; NODE-MARKS: and the nodes' light - NODE-GLINT's glints, the glow a node with no picture
   /** FONT1 (2026-09-16, Mac: "Especially the new online interfaces font use our enhanced font"): THE SOCKET'S OWN
    *  WORD, IN THE SKIN'S FACE. The online lane is the enhanced lane whole (systems/online/onlineLane.js), so this line -
    *  connecting, reconnecting, refused - was the one online surface still drawn in the classic bitmap font while
@@ -30047,7 +30057,7 @@ const _pixelOrder = [];   // NEAR-FIRST: the frame's pixel walk, nearest first -
     // shipped; the HOSTS that drive it never did, and `world.js`
     // imported the door without ever calling it. A host that boots
     // after this one rebuilds the node on its first painted frame.
-    if (!frameAlive(_frameToken)) { deathMarkers.dispose(); betterCampfires.dispose(); partyVisibility.dispose(); destroyWorldPlaque(); return; }   // P0: a later boot or an unwind killed this loop (TV1: the travel view goes on its own heartbeat - scenes/travelView.js)
+    if (!frameAlive(_frameToken)) { overworldBeacons.dispose(); deathMarkers.dispose(); betterCampfires.dispose(); partyVisibility.dispose(); destroyWorldPlaque(); return; }   // P0: a later boot or an unwind killed this loop (TV1: the travel view goes on its own heartbeat - scenes/travelView.js)
     deathMarkers.update();
     if (frameCapSkip(now)) { requestAnimationFrame(frame); return; }   // FPS-CAP1: held back to the Frame Rate Cap - no stamp, no input frame, `last` kept
     if (gamePaused() || townTalk.hudCovered || townTalk.hudHidden || !hudRenderEnabled() || modes?.hudCovered || travelView?.active) partyVisibility.hide();

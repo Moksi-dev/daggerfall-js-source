@@ -22,6 +22,7 @@ export function createBetterCampfires({renderer, canvas, pool, feet, exterior}) 
         });
       }catch(error){release();failed=true;console.warn('[Keta campfires] Beacon unavailable',error);}
     },
+    beamPoints(){return getPref('ketaCampMap')&&getPref('ketaCampBeacons')?ownCampMarks(pool(),feet()).map(row=>row.at):[];},
     mapMarks(){return getPref('ketaCampMap')?campOverworldMarks(pool(),{beam:getPref('ketaCampBeacons')!==false,opacity:getPref('ketaCampOpacity')??.6}):[];},
     dispose(){release();canvas.removeEventListener('webglcontextlost',lost);},
   };

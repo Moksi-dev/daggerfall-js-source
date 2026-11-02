@@ -13,11 +13,12 @@ test('ordinary map marks stay ordinary; unknown distance is never fabricated',()
   assert.equal(projectBeaconMarker({deathId:'a',at:[3000,0,4000]},[0,0,0]).sub,'5.0 km');
 });
 test('beacons use icons and subtext below, never a tile, and edges are icon-only',()=>{
-  const calls=[],gradient={addColorStop(){}};const ctx=new Proxy({globalAlpha:1},{get:(o,k)=>k in o?o[k]:k==='createLinearGradient'?()=>gradient:(...a)=>calls.push([k,...a]),set:(o,k,v)=>(o[k]=v,true)});
+  const calls=[];const ctx=new Proxy({globalAlpha:1},{get:(o,k)=>k in o?o[k]:(...a)=>calls.push([k,...a]),set:(o,k,v)=>(o[k]=v,true)});
   for(const type of ['campfire','tent','skull']){
     calls.length=0;const q={x:100,y:120,m:{beaconIcon:type,label:type,sub:'50 m'}};
     assert.equal(paintBeaconMapMarker(ctx,q,400),true);assert.deepEqual(calls.filter(c=>c[0]==='fillText').map(c=>c[1]),[type,'50 m']);assert.ok(calls.filter(c=>c[0]==='fillText').every(c=>c[3]>q.y));assert.ok(!calls.some(c=>c[0]==='fillRect'));
     const box=beaconMapBox(q,400);assert.ok(box.x1-box.x0<=180);assert.ok(box.y1>=149);
+    assert.equal(box.y0,q.y-27);assert.ok(!calls.some(c=>c[0]==='createLinearGradient'),'beam must be world geometry, never HUD gradient');
     calls.length=0;paintBeaconMapMarker(ctx,{...q,held:{angle:0}},400);assert.ok(!calls.some(c=>c[0]==='fillText'));
   }
 });

@@ -1,3 +1,5 @@
+import {createStackSplitDialog,isStackSplitClick,stackSplitEnabled} from '../stackSplitDialog.js';
+const tradeSplit=createStackSplitDialog();
 // ENHANCED TRADE — the shop counter (Buy / Sell / SellMagic / Repair /
 // Identify) drawn in the ENHANCED INVENTORY's own structure: the same
 // `.packcol` / `.itemrow` / `.packtabs` shape enhancedInventory.js
@@ -812,6 +814,17 @@ function drawTile(line, grid, landed) {
   return tile;
 }
 
+function openTradeSplit(item,from){
+  if(!Number.isSafeInteger(item?.stackCount)||item.stackCount<=1||(!inBuy()&&!selling()))return;
+  const owner=host,sourceDeps=deps,sourceMode=mode;
+  const source=()=>from==='local'?(inBuy()?basket:deps.packItems?.()??[]):(inBuy()?deps.shelfItems?.()??[]:remoteItems());
+  const valid=()=>host===owner&&deps===sourceDeps&&mode===sourceMode&&source().includes(item);
+  tradeSplit.open({owner,name:itemLine(item,deps.entity).name,destination:inBuy()?(from==='remote'?'purchase basket':'shop'):(from==='local'?'sale counter':'inventory'),
+    getTotal:()=>item.stackCount??1,getMax:()=>valid()?Math.min(item.stackCount??1,splitMaxOf(item,from)):0,
+    onConfirm:amount=>{if(!valid())return;qty={item,text:String(amount)};selected=null;lastRowClick={item:null,time:0};try{if(from==='local')pickLocal(item);else pickRemote(item);}finally{if(qty.item===item)qty={item:null,text:''};}},
+  });
+}
+
 function itemRow(item, from) {
   const line = itemLine(item, deps.entity);
   const row = markItemFrame(el('button', 'itemrow'), item);   // RARITY-UI / SIGIL-UI: the shelf's icons wear their tier too
@@ -853,6 +866,9 @@ function itemRow(item, from) {
   // same-node double-click detection before a native `dblclick` would
   // ever get a chance to fire.
   row.onclick = (e) => {
+    if(stackSplitEnabled()&&isStackSplitClick(e)){
+      e.preventDefault?.();openTradeSplit(item,from);return;
+    }
     const now = e.timeStamp;
     if (lastRowClick.item === item && now - lastRowClick.time <= DOUBLE_CLICK_MS) {
       lastRowClick = { item: null, time: 0 };
@@ -1101,6 +1117,7 @@ function render() {
 }
 
 function onKey(e) {
+  if(tradeSplit.key(e))return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (box) {
     if (box.buttons === 'YesNo') {
@@ -1125,6 +1142,7 @@ function onKey(e) {
 export function mountEnhancedTrade(hostEl, hooks = {}) {
   injectEnhancedStyle();
   injectEnhancedFonts();
+  tradeSplit.close();
   host = hostEl;
   deps = hooks;
   mode = hooks.mode ?? 'Buy';
@@ -1147,6 +1165,7 @@ export function mountEnhancedTrade(hostEl, hooks = {}) {
   return {
     repaint: render,
     unmount() {
+      tradeSplit.close();
       // AUDIT SS: EVERY way off this screen puts back what is staged - OnPop's ClearSelectedItems. The door's own close
       // (the QuickDial's key, a death, a building left, a load: ui/tradeDoor.js dispose) comes straight here, past this
       // view's close(), and the staged goods - a sale's, an identify's, a basket's - went with the view
